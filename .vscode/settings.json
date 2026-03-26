@@ -1,0 +1,31 @@
+{
+  "idf.openOcdConfigs": [
+    "board/esp32p4-builtin.cfg"
+  ],
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32p4"
+  },
+  "clangd.path": "C:\\Users\\thana\\.espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=C:\\Users\\thana\\.espressif\\tools\\riscv32-esp-elf\\esp-14.2.0_20241119\\riscv32-esp-elf\\bin\\riscv32-esp-elf-gcc.exe",
+    "--compile-commands-dir=c:\\Users\\thana\\Desktop\\Kyutech\\Research\\esp32p4_cam_lcd_preview\\build"
+  ],
+  "files.associations": {
+    "esp_video.h": "c",
+    "esp_video_init.h": "c",
+    "lcd_ek79007.h": "c",
+    "esp_cam_sensor_types.h": "c",
+    "example_video_common.h": "c",
+    "esp_lcd_ek79007.h": "c",
+    "esp_lcd_hx8394.h": "c",
+    "stdlib.h": "c",
+    "memory": "c",
+    "optional": "c"
+  },
+  "idf.portWin": "COM17",
+  "idf.flashType": "UART",
+  "idf.pythonInstallPath": "C:\\Users\\thana\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.espIdfPathWin": "c:\\Users\\thana\\esp\\v5.5.1\\esp-idf",
+  "idf.toolsPathWin": "C:\\Users\\thana\\.espressif"
+}

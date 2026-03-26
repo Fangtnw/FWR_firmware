@@ -1,0 +1,13 @@
+idf_component_register(
+    SRCS 
+        lcd.c
+        drivers/lcd_ek79007.c
+        drivers/lcd_hx8394.c
+    INCLUDE_DIRS 
+        .
+        drivers
+    REQUIRES 
+        esp_lcd
+        esp_lcd_ek79007
+        esp_lcd_hx8394
+)

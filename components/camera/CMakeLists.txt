@@ -1,0 +1,15 @@
+idf_component_register(
+    SRCS 
+        "camera.c"
+    INCLUDE_DIRS 
+        "."
+    REQUIRES 
+        lcd
+        esp_timer
+        esp_video
+        esp_driver_ppa
+        esp_system
+        esp_psram
+        driver
+        example_video_common
+)
