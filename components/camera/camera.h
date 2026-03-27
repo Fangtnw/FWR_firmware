@@ -20,6 +20,7 @@ typedef struct {
 } camera_frame_t;
 
 void camera_set_sensor(camera_sensor_t sensor);
+void camera_set_resolution(int width, int height);  // call before camera_init()
 void camera_init(void);
 camera_frame_t camera_get_frame(void);
 void camera_return_frame(camera_frame_t *frame);

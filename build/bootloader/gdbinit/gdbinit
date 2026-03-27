@@ -1,2 +1,2 @@
-source C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader/gdbinit/symbols
-source C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader/gdbinit/connect
+source C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader/gdbinit/symbols
+source C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader/gdbinit/connect

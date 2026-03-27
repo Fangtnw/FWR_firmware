@@ -1,4 +1,4 @@
-/* * Data converted from C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 #if !defined (__APPLE__) && !defined (__linux__)

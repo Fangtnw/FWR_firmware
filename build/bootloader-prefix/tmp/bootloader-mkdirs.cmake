@@ -10,18 +10,18 @@ if(NOT EXISTS "C:/Users/thana/esp/v5.5.1/esp-idf/components/bootloader/subprojec
   file(MAKE_DIRECTORY "C:/Users/thana/esp/v5.5.1/esp-idf/components/bootloader/subproject")
 endif()
 file(MAKE_DIRECTORY
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader"
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix"
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/tmp"
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/src/bootloader-stamp"
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/src"
-  "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/src/bootloader-stamp"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/tmp"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/src/bootloader-stamp"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/src"
+  "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/src/bootloader-stamp"
 )
 
 set(configSubDirs )
 foreach(subDir IN LISTS configSubDirs)
-    file(MAKE_DIRECTORY "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
+    file(MAKE_DIRECTORY "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/src/bootloader-stamp/${subDir}")
 endforeach()
 if(cfgdir)
-  file(MAKE_DIRECTORY "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
+  file(MAKE_DIRECTORY "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/bootloader-prefix/src/bootloader-stamp${cfgdir}") # cfgdir has leading slash
 endif()

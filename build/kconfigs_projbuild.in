@@ -3,4 +3,4 @@ source "C:/Users/thana/esp/v5.5.1/esp-idf/components/esp_app_format/Kconfig.proj
 source "C:/Users/thana/esp/v5.5.1/esp-idf/components/esp_rom/Kconfig.projbuild"
 source "C:/Users/thana/esp/v5.5.1/esp-idf/components/esptool_py/Kconfig.projbuild"
 source "C:/Users/thana/esp/v5.5.1/esp-idf/components/partition_table/Kconfig.projbuild"
-source "C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/components/example_video_common/Kconfig.projbuild"
+source "C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/components/example_video_common/Kconfig.projbuild"

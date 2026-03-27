@@ -34,12 +34,20 @@ static int        s_src_h   = 0;
 
 static mmap_buf_t s_bufs[BUFFER_COUNT] = {0};
 static camera_sensor_t s_sensor = CAMERA_OV5647;
+static int s_req_w = 0;  // 0 = use sensor default
+static int s_req_h = 0;
 
 
 /* ---------------------------- SENSOR SELECT ---------------------------- */
 void camera_set_sensor(camera_sensor_t sensor)
 {
     s_sensor = sensor;
+}
+
+void camera_set_resolution(int width, int height)
+{
+    s_req_w = width;
+    s_req_h = height;
 }
 
 
@@ -60,7 +68,10 @@ void camera_init(void)
     struct v4l2_format fmt = {0};
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
-    if (s_sensor == CAMERA_OV5647) {
+    if (s_req_w > 0 && s_req_h > 0) {
+        fmt.fmt.pix.width  = s_req_w;
+        fmt.fmt.pix.height = s_req_h;
+    } else if (s_sensor == CAMERA_OV5647) {
         fmt.fmt.pix.width  = 800;
         fmt.fmt.pix.height = 640;
     } else {

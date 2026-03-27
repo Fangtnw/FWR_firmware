@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include <string.h>
 #include <math.h>
+#include <climits>
 
 static const char *TAG = "OFD";
 
@@ -129,7 +130,8 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     float div_sum = 0.0f;
     float vx_sum  = 0.0f;
     float vy_sum  = 0.0f;
-    int   div_cnt = 0;
+    int   div_cnt  = 0;
+    int   flow_cnt = 0;
 
     // Left/right expansion measure for steering
     float div_left_sum = 0.0f;
@@ -155,7 +157,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
             if (tex < MIN_TEX) continue;
 
             // block matching: search best (dx,dy) in prev for block at (x,y) in cur
-            int bestSad = 1e9;
+            int bestSad = INT_MAX;
             int bestDx = 0, bestDy = 0;
 
             for (int dy = -SRCH_R; dy <= SRCH_R; ++dy) {
@@ -182,6 +184,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
 
             vx_sum += (float)u;
             vy_sum += (float)v;
+            flow_cnt++;
         }
 
         // Compute divergence on grid cells where we have neighbors:
@@ -241,8 +244,10 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     const float div_avg = div_sum / (float)div_cnt;
 
     out.divergence = div_avg;
-    out.vx_mean = vx_sum / (float)(div_cnt); // not perfect, but ok as a proxy
-    out.vy_mean = vy_sum / (float)(div_cnt);
+    out.vx_mean = (flow_cnt > 0) ? (vx_sum / (float)flow_cnt) : 0.0f;
+    out.vy_mean = (flow_cnt > 0) ? (vy_sum / (float)flow_cnt) : 0.0f;
+    out.flow_cnt = flow_cnt;
+    out.div_cnt  = div_cnt;
 
     // time-to-contact proxy: tau ≈ 1/div (only meaningful if div>0)
     if (div_avg > EPS_DIV) out.tau = 1.0f / div_avg;

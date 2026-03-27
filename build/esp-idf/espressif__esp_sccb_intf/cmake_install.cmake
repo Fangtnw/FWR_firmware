@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/managed_components/espressif__esp_sccb_intf
+# Install script for directory: C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/managed_components/espressif__esp_sccb_intf
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

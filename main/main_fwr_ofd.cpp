@@ -1,149 +1,102 @@
 /**
- * main_fwr_ofd.cpp - FWR + OFD Smooth Obstacle Avoidance
+ * main_fwr_ofd.cpp — FWR Manual Flight + OFD Logging + SD Video Recording
  *
- * - Continuous proportional control
- * - Telemetry (div, lr)
- * - Red log on avoid
+ * - Manual RC flight via SBUS → fwr_control servos
+ * - SD video recording (RAW RGB565) triggered by SW1 switch
+ * - OFD (optical flow divergence) computed by the recording module and logged
+ * - Avoidance is computed and logged; servo output is commented out
+ *   → uncomment fwr_set_ofd_avoidance() to enable full obstacle avoidance
  */
 
+#include "video_rec.h"
 #include "fwr_control.h"
 #include "sbus_rx.h"
 #include "camera.h"
-#include "ofd.h"
-
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <math.h>
 
 static const char *TAG = "FWR_OFD";
 
-/* ---------------- Camera ---------------- */
+/* ---- Camera ---- */
 #define CAM_W  800
 #define CAM_H  640
-#define OFD_W  160
-#define OFD_H  120
 
-/* ------------- OFD tuning --------------- */
-#define DIV_DANGER      0.05f
-#define KP_AVOID        4000.0f
-#define MAX_AVOID_US    600
-#define MIN_AVOID_US    0
-#define USE_YAW         0
-#define USE_ROLL        1
+/* ---- OFD avoidance tuning (logging only for now) ---- */
+#define DIV_DANGER    0.05f
+#define KP_AVOID      4000.0f
+#define MAX_AVOID_US  600
+#define USE_ROLL      1
+#define USE_YAW       0
 
-/* ------------- Debug -------------------- */
-#define OFD_DEBUG 1
-#define TELEMETRY_PERIOD 10
+/* ---- SW1 switch thresholds ---- */
+extern volatile int sw1_raw;
+#define SW_LOW_MAX   600
+#define SW_HIGH_MIN  1400
 
-#define ANSI_RED   "\033[31m"
-#define ANSI_RESET "\033[0m"
-
-/* ---------------------------------------- */
-
-__attribute__((section(".ext_ram.bss"), aligned(64)))
-static uint8_t ofd_gray[OFD_W * OFD_H];
-
-/* Downsample RGB565 -> Grayscale */
-static inline void downsample_rgb565_to_gray(
-    const uint16_t *src, int src_w, int src_h,
-    uint8_t *dst, int dst_w, int dst_h)
-{
-    for (int y = 0; y < dst_h; ++y) {
-        int sy = (y * src_h) / dst_h;
-        const uint16_t *srow = src + sy * src_w;
-        for (int x = 0; x < dst_w; ++x) {
-            int sx = (x * src_w) / dst_w;
-            uint16_t p = srow[sx];
-            uint8_t r = (uint8_t)(((p >> 11) & 0x1F) * 255 / 31);
-            uint8_t g = (uint8_t)(((p >>  5) & 0x3F) * 255 / 63);
-            uint8_t b = (uint8_t)((p & 0x1F) * 255 / 31);
-            dst[y * dst_w + x] =
-                (uint8_t)((77 * r + 150 * g + 29 * b) >> 8);
-        }
-    }
-}
+/* ======================================================== */
 
 extern "C" void app_main(void)
 {
-    ESP_LOGI(TAG, "FWR + OFD Smooth Avoidance (DEBUG)");
+    ESP_LOGI(TAG, "FWR Manual + OFD Log + SD Recording");
 
     fwr_control_init();
     fwr_control_start();
     sbus_rx_init();
     sbus_rx_start();
 
+    video_rec_init();   // SD card, PSRAM ring buffer, OFD engine
+
     camera_set_sensor(CAMERA_OV5647);
+    camera_set_resolution(CAM_W, CAM_H);
     camera_init();
-    ESP_LOGI(TAG, "Camera initialized (%dx%d)", CAM_W, CAM_H);
 
-    ofd_init(OFD_W, OFD_H);
-    ESP_LOGI(TAG, "OFD initialized (%dx%d), DIV_DANGER=%.2f",
-             OFD_W, OFD_H, (double)DIV_DANGER);
+    /* Probe first frame to confirm actual frame size */
+    camera_frame_t probe = camera_get_frame();
+    ESP_LOGI(TAG, "Camera ready — %d bytes/frame  (%dx%d RGB565 expected %d)",
+             probe.length, CAM_W, CAM_H, CAM_W * CAM_H * 2);
+    camera_return_frame(&probe);
 
-    int telem_count = 0;
-    int avoid_count = 0;
-    float avoid_lp = 0;   // low-pass filtered command
+    int prev_sw = -1;
 
     while (1) {
+
+        /* ---- SW1: UP = record, DOWN = stop ---- */
+        int sw       = sw1_raw;
+        int sw_state = (sw >= SW_HIGH_MIN) ? 2 : (sw <= SW_LOW_MAX) ? 0 : 1;
+
+        if (sw_state != prev_sw) {
+            ESP_LOGI(TAG, "SW1 %d -> %d", prev_sw, sw_state);
+            if (sw_state == 2 && !is_recording()) start_recording();
+            if (sw_state == 0 &&  is_recording()) stop_recording();
+            prev_sw = sw_state;
+        }
+
+        /* ---- Capture and forward to recorder ---- */
         camera_frame_t f = camera_get_frame();
-        if (!f.data || f.length == 0) {
-            camera_return_frame(&f);
-            vTaskDelay(pdMS_TO_TICKS(5));
-            continue;
-        }
+        video_rec_enqueue(&f);   // memcpy to PSRAM ring buffer + camera_return_frame inside
 
-        /* Downsample to grayscale for OFD */
-        downsample_rgb565_to_gray(
-            (const uint16_t *)f.data, CAM_W, CAM_H,
-            ofd_gray, OFD_W, OFD_H
-        );
-
-        ofd_result_t r = ofd_process_gray(ofd_gray);
-
-#if OFD_DEBUG
-        if ((telem_count++ % TELEMETRY_PERIOD) == 0 && r.valid) {
-            ESP_LOGI("OFD_TELEM",
-                     "div=%.4f  lr=%.4f  avoid=%.1f",
-                     (double)r.divergence,
-                     (double)r.lr_balance,
-                     (double)avoid_lp);
-        }
-#endif
-
+        /* ---- OFD avoidance — logged only, servo output disabled ---- */
+        ofd_result_t r = video_rec_last_ofd();
         if (r.valid && r.divergence > DIV_DANGER) {
 
-            float avoid_f =
-                KP_AVOID * r.divergence;
+            float avoid_f = KP_AVOID * r.divergence;
+            if (avoid_f > MAX_AVOID_US) avoid_f = MAX_AVOID_US;
+            int avoid_us  = (int)avoid_f;
+            int direction = (r.lr_balance >= 0.0f) ? -1 : +1;
+            int ail = USE_ROLL ? direction * avoid_us : 0;
+            int rud = USE_YAW  ? direction * avoid_us : 0;
+            (void)rud;
 
-            /* Clamp */
-            if (avoid_f >  MAX_AVOID_US) avoid_f =  MAX_AVOID_US;
-            if (avoid_f < -MAX_AVOID_US) avoid_f = -MAX_AVOID_US;
-
-            int avoid_us = (int)avoid_f;
-
-            int ail = USE_ROLL ? avoid_us : 0;
-            int rud = USE_YAW  ? avoid_us : 0;
-
-            fwr_set_ofd_avoidance(ail, rud);
-
-            if ((avoid_count++ % 5) == 0) {
-                printf(ANSI_RED
-                       "[AVOID] div=%.4f lr=%.4f -> cmd=%d\n"
-                       ANSI_RESET,
-                       (double)r.divergence,
-                       (double)r.lr_balance,
-                       avoid_us);
-                printf("raw avoid_f = %.2f\n", avoid_f);
-
-            }
+            ESP_LOGW(TAG, "[AVOID] div=%.4f  lr=%.4f  cmd=%d  (output disabled)",
+                     (double)r.divergence, (double)r.lr_balance, ail);
+            // fwr_set_ofd_avoidance(ail, rud);   /* TODO: uncomment to enable avoidance */
 
         } else {
-            avoid_lp = 0;
-            fwr_set_ofd_avoidance(0, 0);
+            // fwr_set_ofd_avoidance(0, 0);
         }
 
-        camera_return_frame(&f);
-        vTaskDelay(pdMS_TO_TICKS(5));
+        /* Yield when idle — skip delay during recording to maximise frame rate */
+        if (!is_recording()) vTaskDelay(pdMS_TO_TICKS(5));
     }
 }

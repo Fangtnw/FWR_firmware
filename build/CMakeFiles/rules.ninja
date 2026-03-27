@@ -2231,7 +2231,7 @@ rule C_STATIC_LIBRARY_LINKER____idf_main_
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = C:\Users\thana\.espressif\tools\cmake\3.30.2\bin\cmake.exe --regenerate-during-build -SC:\Users\thana\Desktop\Kyutech\Research\FWR_vision -BC:\Users\thana\Desktop\Kyutech\Research\FWR_vision\build
+  command = C:\Users\thana\.espressif\tools\cmake\3.30.2\bin\cmake.exe --regenerate-during-build -SC:\Users\thana\01_Fang\Research\04_Firmware_ESP32P4\FWR_vision -BC:\Users\thana\01_Fang\Research\04_Firmware_ESP32P4\FWR_vision\build
   description = Re-running CMake...
   generator = 1
 

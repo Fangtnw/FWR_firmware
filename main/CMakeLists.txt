@@ -3,9 +3,9 @@ idf_component_register(
     SRCS  "ofd.cpp"  "yolo.cpp" "fwr_control/fwr_control.cpp"  "fwr_control/sbus_rx.cpp"
     # "main.cpp"
     # "main_rx_test.cpp"
-    # "main_fwr_video.cpp"
     # "main_fwr_test.cpp"
-    "main_fwr_ofd.cpp"
+    "main_fwr_video.cpp"   # recording module (no app_main)
+    "main_fwr_ofd.cpp"     # main entry point
    
     #  "espdet_detect.cpp" "espdet_detect.hpp" "espdet.cpp"
     INCLUDE_DIRS "." "fwr_control"

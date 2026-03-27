@@ -595,5 +595,5 @@ const esp_ipa_config_t *esp_ipa_pipeline_get_config(const char *name)
     return NULL;
 }
 
-/* Json file: C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/managed_components/espressif__esp_cam_sensor/sensors/ov5647/cfg/ov5647_default.json C:/Users/thana/Desktop/Kyutech/Research/FWR_vision/managed_components/espressif__esp_cam_sensor/sensors/sc2336/cfg/sc2336_default.json */
+/* Json file: C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/managed_components/espressif__esp_cam_sensor/sensors/ov5647/cfg/ov5647_default.json C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/managed_components/espressif__esp_cam_sensor/sensors/sc2336/cfg/sc2336_default.json */
 

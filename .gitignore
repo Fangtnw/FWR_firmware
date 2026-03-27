@@ -1,0 +1,49 @@
+# ── ESP-IDF Build Output ─────────────────────────────────────────────────────
+build/
+sdkconfig.old
+
+# ── ESP-IDF Component Manager ────────────────────────────────────────────────
+# managed_components/ is auto-downloaded by `idf.py` (like node_modules).
+# dependencies.lock is intentionally tracked — it pins exact component versions.
+managed_components/
+
+# ── SDK Config ───────────────────────────────────────────────────────────────
+# sdkconfig is tracked (hardware-specific config, regenerated from sdkconfig.defaults).
+# Uncomment the line below only if you want each developer to generate their own:
+# sdkconfig
+
+# ── Video / Data Files ───────────────────────────────────────────────────────
+# RAW recordings, OFD CSV sidecars, and converted MP4s written to SD card or
+# produced by the video converter — these are data, not source files.
+V*.VID
+V*.vid
+V*.CSV
+V*.mp4
+
+# ── Python (video converter) ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── IDE / Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.code-workspace
+*.suo
+*.user
+
+# ── OS-generated ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ── Compiled / Linked Artifacts (safety net outside build/) ──────────────────
+*.o
+*.a
+*.elf
+*.bin
+*.map

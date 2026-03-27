@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(find /c/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision -type f -name *ov5647* -o -name *OV5647*)",
+      "Bash(grep -n \"esp_video_set_parm\\\\|esp_video_get_parm\" /c/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/managed_components/espressif__esp_video/src/*.c)"
+    ]
+  }
+}

@@ -11,6 +11,8 @@ typedef struct {
     float vx_mean;      // mean horizontal flow
     float vy_mean;      // mean vertical flow
     float lr_balance;   // (right expansion - left expansion) for turning
+    int   flow_cnt;     // number of valid flow matches (diagnostic)
+    int   div_cnt;      // number of valid divergence terms (diagnostic)
     bool  valid;        // false if not enough texture/matches
 } ofd_result_t;
 
