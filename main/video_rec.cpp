@@ -63,6 +63,8 @@ static QueueHandle_t s_ofd_queue   = nullptr;  // capacity 1, frame_slot_t*
 static ofd_result_t  s_last_ofd    = {};       // latest OFD result
 static TaskHandle_t  s_ofd_task    = nullptr;
 
+static imu_data_t    s_last_imu    = {};       // latest IMU sample (set from main loop)
+
 /* ---- SD write buffer (DMA-capable internal SRAM for direct SDMMC DMA) ---- */
 static uint8_t     *s_write_buf   = nullptr;
 static const size_t WRITE_BUF_SIZE = 64 * 1024;  // 64KB; must be in internal SRAM for DMA
@@ -313,13 +315,14 @@ void start_recording(void)
              WRITE_BUF_SIZE / 1024,
              s_write_buf ? (s_write_buf_dma ? "DMA SRAM" : "PSRAM") : "none (SLOW)");
 
-    /* Open OFD sidecar CSV */
+    /* Open OFD+IMU sidecar CSV */
     csv_fp = fopen(csv_name, "w");
     if (csv_fp) {
         fprintf(csv_fp,
                 "frame,timestamp_ms,divergence,lr_balance,tau,vx_mean,vy_mean,"
-                "flow_cnt,div_cnt,valid\n");
-        ESP_LOGI(TAG, "OFD sidecar: %s", csv_name);
+                "flow_cnt,div_cnt,valid,"
+                "ax,ay,az,gx,gy,gz,roll,pitch,yaw\n");
+        ESP_LOGI(TAG, "OFD+IMU sidecar: %s", csv_name);
     } else {
         ESP_LOGW(TAG, "Could not open CSV sidecar (errno=%d)", errno);
     }
@@ -366,6 +369,7 @@ void start_recording(void)
     // Prepare writer task state
     s_writer_frame_count = 0;
     memset(&s_last_ofd, 0, sizeof(s_last_ofd));
+    memset(&s_last_imu, 0, sizeof(s_last_imu));
     frame_count = 0;
     first_frame_size = 0;
     recording_start_time = esp_timer_get_time();
@@ -528,7 +532,10 @@ static void writer_task(void *arg)
         }
 
         if (csv_fp) {
-            fprintf(csv_fp, "%lu,%lld,%.5f,%.5f,%.5f,%.4f,%.4f,%d,%d,%d\n",
+            imu_data_t imu = s_last_imu;  // snapshot (main loop writes continuously)
+            fprintf(csv_fp,
+                    "%lu,%lld,%.5f,%.5f,%.5f,%.4f,%.4f,%d,%d,%d,"
+                    "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
                     (unsigned long)s_writer_frame_count,
                     (long long)slot->capture_ts_ms,
                     (double)s_last_ofd.divergence,
@@ -538,7 +545,10 @@ static void writer_task(void *arg)
                     (double)s_last_ofd.vy_mean,
                     s_last_ofd.flow_cnt,
                     s_last_ofd.div_cnt,
-                    (int)s_last_ofd.valid);
+                    (int)s_last_ofd.valid,
+                    (double)imu.ax,   (double)imu.ay,   (double)imu.az,
+                    (double)imu.gx,   (double)imu.gy,   (double)imu.gz,
+                    (double)imu.roll, (double)imu.pitch, (double)imu.yaw);
         }
 
         // Log fps every 10 written frames
@@ -606,6 +616,20 @@ void video_rec_init(void)
     }
     ESP_LOGI(TAG, "Frame ring: %d x %d bytes PSRAM", FRAME_RING_SLOTS, FRAME_SLOT_SIZE);
 
+    // Scan SD card for existing V*.VID files and resume numbering from the next ID.
+    if (sd_mounted) {
+        char path[64];
+        for (int id = 0; id < 10000; id++) {
+            snprintf(path, sizeof(path), "/sdcard/V%04d.VID", id);
+            struct stat st;
+            if (stat(path, &st) != 0) {
+                video_id = id;  // first ID with no file
+                break;
+            }
+        }
+        ESP_LOGI(TAG, "Next video ID: %d", video_id);
+    }
+
     ofd_gray = (uint8_t *)heap_caps_malloc(OFD_W * OFD_H, MALLOC_CAP_SPIRAM);
     if (!ofd_gray) {
         ESP_LOGE(TAG, "OFD gray buffer alloc failed");
@@ -619,6 +643,9 @@ bool is_recording(void) { return recording; }
 
 /** Return the latest OFD result from the background ofd_task. */
 ofd_result_t video_rec_last_ofd(void) { return s_last_ofd; }
+
+/** Store the latest IMU sample for CSV logging. Called from main loop. */
+void video_rec_set_imu(imu_data_t d) { s_last_imu = d; }
 
 /**
  * video_rec_enqueue — copy a camera frame into the PSRAM ring buffer

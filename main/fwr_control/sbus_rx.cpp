@@ -134,7 +134,7 @@ static void sbus_task(void *arg)
                             PROPO_MIN, PROPO_MAX,
                             -300, 300
                         );
-                        flag_square_wave = (ch[4] > PROPO_NEUTRAL);
+                        // flag_square_wave = (ch[4] > PROPO_NEUTRAL);  // SW1 also controls recording; decouple if needed
 
                         frequency = map_int(
                             clamp(ch[5], PROPO_MIN, PROPO_MAX),

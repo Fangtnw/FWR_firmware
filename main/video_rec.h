@@ -14,6 +14,16 @@
 extern "C" {
 #endif
 
+/** IMU sample logged alongside OFD data in the sidecar CSV. */
+typedef struct {
+    float ax, ay, az;       // acceleration (g)
+    float gx, gy, gz;       // angular velocity (deg/s)
+    float roll, pitch, yaw; // angle (deg)
+} imu_data_t;
+
+/** Push the latest IMU reading into the recording module for CSV logging. */
+void video_rec_set_imu(imu_data_t d);
+
 /** Init SD card, PSRAM ring buffer, and OFD engine. Call once at startup. */
 void video_rec_init(void);
 
