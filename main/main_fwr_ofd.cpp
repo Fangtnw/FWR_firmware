@@ -9,6 +9,7 @@
  */
 
 #include "video_rec.h"
+#include "ofd_config.h"
 #include "fwr_control.h"
 #include "sbus_rx.h"
 #include "camera.h"
@@ -137,12 +138,9 @@ static void imu_init(void)
 #define CAM_W  800
 #define CAM_H  640
 
-/* ---- OFD avoidance tuning (logging only for now) ---- */
-#define DIV_DANGER    0.05f
-#define KP_AVOID      4000.0f
-#define MAX_AVOID_US  600
-#define USE_ROLL      1
-#define USE_YAW       0
+/* ---- OFD avoidance output scaling (thresholds/detection in ofd_task via ofd_config.h) ---- */
+#define MAX_AVOID_US  600   // max servo command magnitude (µs)
+#define USE_ROLL      1     // apply turn_cmd to aileron channel
 
 /* ---- SW1 switch thresholds ---- */
 extern volatile int sw1_raw;
@@ -209,22 +207,14 @@ extern "C" void app_main(void)
         camera_frame_t f = camera_get_frame();
         video_rec_enqueue(&f);   // memcpy to PSRAM ring buffer + camera_return_frame inside
 
-        /* ---- OFD avoidance — logged only, servo output disabled ---- */
+        /* ---- OFD avoidance — dual-gate result from ofd_task (logged only) ---- */
         ofd_result_t r = video_rec_last_ofd();
-        if (r.valid && r.divergence > DIV_DANGER) {
-
-            float avoid_f = KP_AVOID * r.divergence;
-            if (avoid_f > MAX_AVOID_US) avoid_f = MAX_AVOID_US;
-            int avoid_us  = (int)avoid_f;
-            int direction = (r.lr_balance >= 0.0f) ? -1 : +1;
-            int ail = USE_ROLL ? direction * avoid_us : 0;
-            int rud = USE_YAW  ? direction * avoid_us : 0;
-            (void)rud;
-
-            ESP_LOGW(TAG, "[AVOID] div=%.4f  lr=%.4f  cmd=%d  (output disabled)",
-                     (double)r.divergence, (double)r.lr_balance, ail);
-            // fwr_set_ofd_avoidance(ail, rud);   /* TODO: uncomment to enable avoidance */
-
+        if (r.looming_detected) {
+            int ail = USE_ROLL ? (int)(r.turn_cmd * MAX_AVOID_US) : 0;
+            ESP_LOGW(TAG, "[AVOID] lvl=%d tau=%.1fms ema_div=%.4f turn=%.3f az_q=%d cmd=%d (disabled)",
+                     r.evasion_level, (double)r.tau_ms,
+                     (double)r.ema_div, (double)r.turn_cmd, (int)r.az_quiet, ail);
+            // fwr_set_ofd_avoidance(ail, 0);   /* TODO: uncomment to enable avoidance */
         } else {
             // fwr_set_ofd_avoidance(0, 0);
         }

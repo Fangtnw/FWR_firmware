@@ -3,6 +3,8 @@
 #include "sbus_rx.h"
 #include "camera.h"
 #include "ofd.h"
+#include "ofd_config.h"
+#include <math.h>   // fabsf, fminf, fmaxf
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -23,9 +25,13 @@
 
 static const char *TAG = "VID_REC";
 
-/* ---- Camera resolution --- change these two to test different sizes ---- */
+/* ---- Camera resolution (sensor output — cannot go below 800x640 on OV5647) ---- */
 #define CAM_W  800
 #define CAM_H  640
+
+/* ---- Recording resolution (downsampled from CAM before SD write) ---- */
+#define REC_W  320
+#define REC_H  240
 
 /* ---- OFD sidecar ---- */
 #define OFD_W  160
@@ -33,8 +39,8 @@ static const char *TAG = "VID_REC";
 
 /* ---- Recording performance tunables ---- */
 #define OFD_EVERY_N      1              // Run OFD every Nth written frame
-#define FRAME_RING_SLOTS 4              // Number of PSRAM frame ring slots
-#define FRAME_SLOT_SIZE  (CAM_W * CAM_H * 2)  // bytes per slot (RGB565)
+#define FRAME_RING_SLOTS 8              // Number of PSRAM frame ring slots
+#define FRAME_SLOT_SIZE  (REC_W * REC_H * 2)  // bytes per slot (RGB565 at REC resolution)
 
 // Pre-allocate this many bytes at recording start by seeking to the end.
 // FatFS builds the entire cluster chain upfront (fast - only FAT table writes,
@@ -67,10 +73,24 @@ static imu_data_t    s_last_imu    = {};       // latest IMU sample (set from ma
 
 /* ---- SD write buffer (DMA-capable internal SRAM for direct SDMMC DMA) ---- */
 static uint8_t     *s_write_buf   = nullptr;
-static const size_t WRITE_BUF_SIZE = 64 * 1024;  // 64KB; must be in internal SRAM for DMA
+static const size_t WRITE_BUF_SIZE = 128 * 1024; // 128KB; must be in internal SRAM for DMA
 
 static uint8_t *ofd_gray = nullptr;  // allocated in PSRAM at init
 static FILE    *csv_fp   = nullptr;
+
+/* Downsample RGB565 -> RGB565 (nearest-neighbour) */
+static inline void downsample_rgb565(
+    const uint16_t *src, int src_w, int src_h,
+    uint16_t *dst, int dst_w, int dst_h)
+{
+    for (int y = 0; y < dst_h; ++y) {
+        int sy = (y * src_h) / dst_h;
+        const uint16_t *srow = src + sy * src_w;
+        for (int x = 0; x < dst_w; ++x) {
+            dst[y * dst_w + x] = srow[(x * src_w) / dst_w];
+        }
+    }
+}
 
 /* Downsample RGB565 -> grayscale (nearest-neighbour) */
 static inline void downsample_rgb565_to_gray(
@@ -321,6 +341,7 @@ void start_recording(void)
         fprintf(csv_fp,
                 "frame,timestamp_ms,divergence,lr_balance,tau,vx_mean,vy_mean,"
                 "flow_cnt,div_cnt,valid,"
+                "ema_div,ema_lr,tau_ms,looming,evasion_level,turn_cmd,az_quiet,"
                 "ax,ay,az,gx,gy,gz,roll,pitch,yaw\n");
         ESP_LOGI(TAG, "OFD+IMU sidecar: %s", csv_name);
     } else {
@@ -340,8 +361,8 @@ void start_recording(void)
         raw_video_header_t *h = (raw_video_header_t *)header_sector;
         h->frame_count = 0;
         h->fps         = 30;
-        h->width       = CAM_W;
-        h->height      = CAM_H;
+        h->width       = REC_W;
+        h->height      = REC_H;
         h->frame_size  = 0;
         fwrite(header_sector, sizeof(header_sector), 1, video_fp);
     }
@@ -437,8 +458,8 @@ void stop_recording(void)
         raw_video_header_t *h = (raw_video_header_t *)header_sector;
         h->frame_count = frame_count;
         h->fps         = (uint32_t)(actual_fps + 0.5f);
-        h->width       = CAM_W;
-        h->height      = CAM_H;
+        h->width       = REC_W;
+        h->height      = REC_H;
         h->frame_size  = first_frame_size;
         fwrite(header_sector, sizeof(header_sector), 1, video_fp);
     }
@@ -484,7 +505,7 @@ static void writer_task(void *arg)
         if (s_writer_frame_count == 0) {
             first_frame_size = (uint32_t)slot->length;
             ESP_LOGI(TAG, "First frame: %d bytes (%dx%d RGB565 = %d bytes)",
-                     slot->length, CAM_W, CAM_H, CAM_W * CAM_H * 2);
+                     slot->length, REC_W, REC_H, REC_W * REC_H * 2);
         } else if (slot->length != first_frame_size) {
             ESP_LOGW(TAG, "Frame size mismatch: %d != %d, skipping",
                      slot->length, first_frame_size);
@@ -525,7 +546,7 @@ static void writer_task(void *arg)
         if (ofd_gray && s_ofd_queue &&
             s_writer_frame_count % OFD_EVERY_N == 0) {
             downsample_rgb565_to_gray(
-                (const uint16_t *)slot->data, CAM_W, CAM_H,
+                (const uint16_t *)slot->data, REC_W, REC_H,
                 ofd_gray, OFD_W, OFD_H);
             uint32_t sig = s_writer_frame_count;
             xQueueOverwrite(s_ofd_queue, &sig);
@@ -535,6 +556,7 @@ static void writer_task(void *arg)
             imu_data_t imu = s_last_imu;  // snapshot (main loop writes continuously)
             fprintf(csv_fp,
                     "%lu,%lld,%.5f,%.5f,%.5f,%.4f,%.4f,%d,%d,%d,"
+                    "%.5f,%.5f,%.3f,%d,%d,%.4f,%d,"
                     "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
                     (unsigned long)s_writer_frame_count,
                     (long long)slot->capture_ts_ms,
@@ -546,6 +568,13 @@ static void writer_task(void *arg)
                     s_last_ofd.flow_cnt,
                     s_last_ofd.div_cnt,
                     (int)s_last_ofd.valid,
+                    (double)s_last_ofd.ema_div,
+                    (double)s_last_ofd.ema_lr,
+                    (double)s_last_ofd.tau_ms,
+                    (int)s_last_ofd.looming_detected,
+                    s_last_ofd.evasion_level,
+                    (double)s_last_ofd.turn_cmd,
+                    (int)s_last_ofd.az_quiet,
                     (double)imu.ax,   (double)imu.ay,   (double)imu.az,
                     (double)imu.gx,   (double)imu.gy,   (double)imu.gz,
                     (double)imu.roll, (double)imu.pitch, (double)imu.yaw);
@@ -567,24 +596,117 @@ static void writer_task(void *arg)
     vTaskDelete(nullptr);
 }
 
+/* ---- OFD task helpers ---- */
+
+// Finding 3: tau computation with dt clamping.
+// Computes τ = div / (Δdiv/dt) — robust to noisy dt (clamped to [DT_MIN, DT_MAX]).
+static float compute_tau_ms(float div_now, float div_prev, float dt_ms)
+{
+    float dt_c = fminf(fmaxf(dt_ms, OFD_DT_MIN_MS), OFD_DT_MAX_MS);
+    float dt_s = dt_c / 1000.0f;
+    float ddiv = div_now - div_prev;
+    if (fabsf(ddiv) < 1e-5f) return OFD_TAU_MAX;
+    float tau_s = div_now / (ddiv / dt_s);
+    return fminf(fmaxf(tau_s * 1000.0f, 0.0f), OFD_TAU_MAX);
+}
+
+// Finding 5: wing-sync gate — returns true when az is near the gravity-only quiet point.
+static inline bool is_wing_quiet(float az_g)
+{
+    return fabsf(az_g - OFD_AZ_QUIET_CENTER) < OFD_AZ_QUIET_BAND;
+}
+
 /* ---- OFD task (Core 0, priority 3) ---- */
 // Receives a uint32_t frame-number signal from the writer task.
 // The writer has already downsampled the frame into ofd_gray before signaling,
-// so this task only runs the block-matching computation (the expensive part).
-// ofd_gray is safe to read here: writer writes it once every OFD_EVERY_N frames
-// (~800ms at 6 fps) and this computation completes in ~20ms — no overlap.
+// so this task runs block-matching + the full filter pipeline.
+// Filter state is local — automatically resets each recording session
+// because this task is re-created at start_recording() / destroyed at stop_recording().
 // Signal value 0 = shutdown sentinel.
 static void ofd_task(void *arg)
 {
+    // Filter state
+    float   ema_div = 0.0f, ema_lr = 0.0f, prev_ema_div = 0.0f;
+    int64_t prev_ts_us = 0;
+    bool    filter_initialized = false;
+
     for (;;) {
         uint32_t sig;
         xQueueReceive(s_ofd_queue, &sig, portMAX_DELAY);
         if (!sig) break;  // 0 = shutdown sentinel
 
-        if (ofd_gray) {
-            ofd_result_t r = ofd_process_gray(ofd_gray);
-            if (r.valid) s_last_ofd = r;
+        if (!ofd_gray) continue;
+
+        // Finding 5: wing-sync gate — skip OFD when az indicates active wing stroke
+        imu_data_t imu_snap = s_last_imu;
+        bool az_quiet = is_wing_quiet(imu_snap.az);
+        s_last_ofd.az_quiet = az_quiet;
+        if (!az_quiet) continue;  // hold previous EMA; do not process this frame
+
+        ofd_result_t r = ofd_process_gray(ofd_gray);
+        r.az_quiet = true;
+
+        // Finding 6: hard-reject frames with insufficient tracked points
+        if (!r.valid || r.div_cnt < OFD_MIN_DIV_CNT || r.flow_cnt == 0) {
+            // Hold EMA values; propagate rejection without poisoning the filter
+            r.ema_div = ema_div;
+            r.ema_lr  = ema_lr;
+            r.tau_ms  = s_last_ofd.tau_ms;
+            r.looming_detected = false;
+            r.evasion_level    = OFD_EVADE_NONE;
+            r.turn_cmd         = s_last_ofd.turn_cmd;
+            s_last_ofd = r;
+            continue;
         }
+
+        // Timestamp for dt used by τ computation
+        int64_t now_us = esp_timer_get_time();
+        float dt_ms = (prev_ts_us > 0)
+                    ? (float)((now_us - prev_ts_us) / 1000)
+                    : OFD_DT_MIN_MS;
+        prev_ts_us = now_us;
+
+        // Finding 2: bias subtraction + EMA
+        float corrected = r.divergence - OFD_DIV_BIAS;
+        if (!filter_initialized) {
+            ema_div = corrected;
+            ema_lr  = r.lr_balance;
+            filter_initialized = true;
+        } else {
+            ema_div = OFD_EMA_ALPHA * corrected + (1.0f - OFD_EMA_ALPHA) * ema_div;
+            ema_lr  = OFD_EMA_ALPHA * r.lr_balance + (1.0f - OFD_EMA_ALPHA) * ema_lr;
+        }
+
+        // Finding 3: τ with dt clamping
+        float tau_ms = compute_tau_ms(ema_div, prev_ema_div, dt_ms);
+        prev_ema_div = ema_div;
+
+        // Finding 4: dual-gate trigger — BOTH divergence AND τ conditions required
+        bool looming = (fabsf(ema_div) > OFD_DIV_THRESHOLD)
+                    && (tau_ms < OFD_TAU_BRAKE_MS)
+                    && (r.div_cnt >= OFD_MIN_DIV_CNT)
+                    && r.valid;
+
+        int evasion_level = OFD_EVADE_NONE;
+        if (looming) {
+            if      (tau_ms < OFD_TAU_EVADE_MS) evasion_level = OFD_EVADE_EVADE;
+            else if (tau_ms < OFD_TAU_BRAKE_MS) evasion_level = OFD_EVADE_BRAKE;
+            else                                 evasion_level = OFD_EVADE_ALERT;
+        }
+
+        // Finding 7: lr_balance gain; negative = turn away from expanding side.
+        // vy_mean is already flipped for roll=-180° in ofd_process_gray (Finding 1).
+        float turn_cmd = -ema_lr * OFD_LR_GAIN;
+        turn_cmd = fminf(fmaxf(turn_cmd, -1.0f), 1.0f);
+
+        r.ema_div          = ema_div;
+        r.ema_lr           = ema_lr;
+        r.tau_ms           = tau_ms;
+        r.turn_cmd         = turn_cmd;
+        r.evasion_level    = evasion_level;
+        r.looming_detected = looming;
+
+        s_last_ofd = r;
     }
 
     s_ofd_task = nullptr;
@@ -660,11 +782,11 @@ void video_rec_enqueue(camera_frame_t *f)
 
     frame_slot_t *slot = nullptr;
     if (xQueueReceive(s_free_queue, &slot, 0) == pdTRUE && slot) {
-        size_t len = (f->length <= FRAME_SLOT_SIZE) ? f->length : FRAME_SLOT_SIZE;
-        memcpy(slot->data, f->data, len);
-        slot->length        = len;
+        downsample_rgb565((const uint16_t *)f->data, CAM_W, CAM_H,
+                          (uint16_t *)slot->data, REC_W, REC_H);
+        slot->length        = REC_W * REC_H * 2;
         slot->capture_ts_ms = (esp_timer_get_time() - recording_start_time) / 1000;
-        camera_return_frame(f);   // release camera buffer ASAP after memcpy
+        camera_return_frame(f);   // release camera buffer ASAP after downsample
 
         if (xQueueSend(s_write_queue, &slot, 0) != pdTRUE) {
             ESP_LOGD(TAG, "write_queue full, frame dropped");

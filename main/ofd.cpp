@@ -1,4 +1,5 @@
 #include "ofd.h"
+#include "ofd_config.h"
 #include "esp_log.h"
 #include <string.h>
 #include <math.h>
@@ -236,7 +237,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     // Update prev frame
     memcpy(gPrev, cur, gW * gH);
 
-    if (div_cnt < 10) {
+    if (div_cnt < OFD_MIN_DIV_CNT) {
         // not enough reliable measurements
         return out;
     }
@@ -245,7 +246,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
 
     out.divergence = div_avg;
     out.vx_mean = (flow_cnt > 0) ? (vx_sum / (float)flow_cnt) : 0.0f;
-    out.vy_mean = (flow_cnt > 0) ? (vy_sum / (float)flow_cnt) : 0.0f;
+    out.vy_mean = (flow_cnt > 0) ? -(vy_sum / (float)flow_cnt) : 0.0f;  // flip Y for roll=-180° mount
     out.flow_cnt = flow_cnt;
     out.div_cnt  = div_cnt;
 
