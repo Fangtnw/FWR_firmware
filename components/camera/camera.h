@@ -24,6 +24,8 @@ void camera_set_resolution(int width, int height);  // call before camera_init()
 void camera_init(void);
 camera_frame_t camera_get_frame(void);
 void camera_return_frame(camera_frame_t *frame);
+int camera_get_stride(void);
+uint32_t camera_get_pixelformat(void);
 
 /**
  * Crop center of camera frame (1280x720 RGB888) to LCD size (1024x600)

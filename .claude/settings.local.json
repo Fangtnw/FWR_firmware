@@ -22,7 +22,28 @@
       "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\build''; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' ''FWR_VISION.bin'' 2>&1\")",
       "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\build''; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' gen_esp32part 2>&1; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' 2>&1 | Select-Object -Last 10\")",
       "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\build''; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' ''FWR_VISION.elf'' 2>&1 | Select-Object -Last 10\")",
-      "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\build''; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' 2>&1 | Select-Object -Last 10\")"
+      "Bash(powershell.exe -Command \"Set-Location ''C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\build''; & ''C:\\\\Users\\\\thana\\\\.espressif\\\\tools\\\\ninja\\\\1.12.1\\\\ninja.exe'' 2>&1 | Select-Object -Last 10\")",
+      "Bash(python -c \"import reportlab; print\\(reportlab.Version\\)\")",
+      "Bash(python make_fwr_manual.py)",
+      "Read(//c/Users/thana/esp/v5.2/esp-idf/components/fatfs/**)",
+      "Read(//c/Users/thana/esp/v5.5/esp-idf/components/fatfs/**)",
+      "Bash(gh issue:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(python3 -c ':*)",
+      "Bash(ls \"C:/Users/thana/01_Fang/Research/04_Firmware_ESP32P4/FWR_vision/build/\"*.bin)",
+      "Bash(grep -oP '\\(?:C:\\\\\\\\\\\\\\\\[^\"\\\\\\\\]+\\\\.\\(?:png|jpg|jpeg|bmp|gif\\)|/[^\"]+\\\\.\\(?:png|jpg|jpeg|bmp|gif\\)\\)' \"/c/Users/thana/.claude/projects/C--Users-thana-01-Fang-Research-04-Firmware-ESP32P4-FWR-vision/f85ac0bd-152b-4a6e-9649-b3979ae675ba.jsonl\")",
+      "Bash(grep -oE 'C:\\\\\\\\\\\\\\\\Users\\\\\\\\\\\\\\\\[^\"]+\\\\.\\(png|jpg|jpeg|bmp\\)' \"/c/Users/thana/.claude/projects/C--Users-thana-01-Fang-Research-04-Firmware-ESP32P4-FWR-vision/f85ac0bd-152b-4a6e-9649-b3979ae675ba.jsonl\")",
+      "Read(//c/Users/thana/.claude/projects/C--Users-thana-01-Fang-Research-04_Firmware-ESP32P4-FWR-vision/**)",
+      "Read(//c/Users/thana/.claude/projects/C--Users-thana-01-Fang-Research-04_Firmware_ESP32P4-FWR_vision/**)",
+      "Bash(grep -oE '\"content\":\"[^\"]{0,500}\\(corrupt|error log|sdcard folder|still corrupt\\)[^\"]{0,500}\"' \"/c/Users/thana/.claude/projects/C--Users-thana-01-Fang-Research-04-Firmware-ESP32P4-FWR-vision/f85ac0bd-152b-4a6e-9649-b3979ae675ba.jsonl\")",
+      "Bash(python -c ':*)",
+      "Bash(node -e ':*)",
+      "Bash(ls *.bat build.*)",
+      "Read(//c//**)",
+      "Read(//c/Espressif/**)",
+      "Bash(cmd.exe /c \"where idf.py\")",
+      "Read(//c/Users/thana/esp/v5.5.1/**)",
+      "Bash(grep -v \"^.*:.*//.*width\\\\|//.*height\")"
     ]
   }
 }

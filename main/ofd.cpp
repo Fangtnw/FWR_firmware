@@ -82,7 +82,8 @@ void ofd_reset(void)
     gHavePrev = false;
 }
 
-ofd_result_t ofd_process_gray(const uint8_t* cur)
+ofd_result_t ofd_process_gray(const uint8_t* cur,
+                              float gx_dps, float gy_dps, float gz_dps)
 {
     ofd_result_t out{};
     out.valid = false;
@@ -95,6 +96,18 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
         gHavePrev = true;
         return out;
     }
+
+    // ---- Gyro derotation setup ----
+    // Convert body-frame gyro (deg/s) to camera-frame (rad/s).
+    // Camera mounted at roll ≈ -180°: X and Y axes flip, Z stays.
+    static constexpr float DEG2RAD = 3.14159265f / 180.0f;
+    const float wx = -gx_dps * DEG2RAD;   // camera frame
+    const float wy = -gy_dps * DEG2RAD;
+    const float wz =  gz_dps * DEG2RAD;
+    const float fx = OFD_FX_PX;
+    const float fy = OFD_FY_PX;
+    const float cx = gW * 0.5f;
+    const float cy = gH * 0.5f;
 
     // We estimate flow on a sparse grid and then compute divergence:
     // div = d(u)/dx + d(v)/dy.
@@ -119,7 +132,6 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     static bool    ok_prev_row[256];
 
     if (maxCols > 256) {
-        // very unlikely for your small OFD size, but safe
         ESP_LOGW(TAG, "Too many columns for static buffers: %d", maxCols);
         memcpy(gPrev, cur, gW * gH);
         return out;
@@ -131,10 +143,12 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     float div_sum = 0.0f;
     float vx_sum  = 0.0f;
     float vy_sum  = 0.0f;
+    float flow_mag_sum = 0.0f;     // derotated flow magnitude accumulator
+    float flow_mag_raw_sum = 0.0f; // raw flow magnitude accumulator
     int   div_cnt  = 0;
     int   flow_cnt = 0;
 
-    // Left/right expansion measure for steering
+    // Left/right expansion measure for steering (computed on derotated flow)
     float div_left_sum = 0.0f;
     float div_right_sum = 0.0f;
     int   left_cnt = 0, right_cnt = 0;
@@ -143,7 +157,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     for (int y = y0; y <= y1; y += GRID_STEP, ++rowIdx) {
         int colIdx = 0;
 
-        // store current row to compute dy with next row
+        // store current row (derotated) to compute dy with next row
         int16_t u_cur_row[256];
         int16_t v_cur_row[256];
         bool    ok_cur_row[256];
@@ -176,22 +190,43 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
 
             // Flow: from prev to cur, if best match in prev is at (x+dx,y+dy),
             // then motion in image is approx (-dx, -dy) (prev -> cur).
-            int16_t u = (int16_t)(-bestDx);
-            int16_t v = (int16_t)(-bestDy);
+            float u_raw = (float)(-bestDx);
+            float v_raw = (float)(-bestDy);
+
+            // ---- Gyro derotation: subtract rotational flow ----
+            // Rotational flow at pixel (x, y) for angular velocity (wx, wy, wz):
+            //   xn = (x - cx) / fx,  yn = (y - cy) / fy
+            //   u_rot = fx * (xn*yn*wx - (1 + xn²)*wy + yn*wz)
+            //   v_rot = fy * ((1 + yn²)*wx - xn*yn*wy - xn*wz)
+            float xn = ((float)x - cx) / fx;
+            float yn = ((float)y - cy) / fy;
+            float u_rot = fx * (xn * yn * wx - (1.0f + xn * xn) * wy + yn * wz);
+            float v_rot = fy * ((1.0f + yn * yn) * wx - xn * yn * wy - xn * wz);
+
+            float u_derot = u_raw - u_rot;
+            float v_derot = v_raw - v_rot;
+
+            // Raw flow magnitude (diagnostic)
+            flow_mag_raw_sum += sqrtf(u_raw * u_raw + v_raw * v_raw);
+
+            // Derotated flow magnitude (primary signal)
+            flow_mag_sum += sqrtf(u_derot * u_derot + v_derot * v_derot);
+
+            // Store derotated flow as integers for divergence finite differences.
+            // Round to nearest int — same quantization as before, but on cleaner signal.
+            int16_t u_d = (int16_t)roundf(u_derot);
+            int16_t v_d = (int16_t)roundf(v_derot);
 
             ok_cur_row[colIdx] = true;
-            u_cur_row[colIdx] = u;
-            v_cur_row[colIdx] = v;
+            u_cur_row[colIdx] = u_d;
+            v_cur_row[colIdx] = v_d;
 
-            vx_sum += (float)u;
-            vy_sum += (float)v;
+            vx_sum += u_raw;
+            vy_sum += v_raw;
             flow_cnt++;
         }
 
-        // Compute divergence on grid cells where we have neighbors:
-        // For each valid point (x,y), if right neighbor exists => du/dx approx (uR-u)/step
-        // If bottom neighbor exists (from prev_row buffers) => dv/dy approx (v - vPrevRow)/step
-        // We accumulate where we have terms.
+        // Compute divergence on derotated flow grid cells where we have neighbors:
         for (int c = 0; c < colIdx; ++c) {
             if (!ok_cur_row[c]) continue;
 
@@ -214,8 +249,7 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
                 div_sum += div_here;
                 div_cnt++;
 
-                // steering split
-                // left/right based on x position; use c index against center
+                // steering split on derotated divergence
                 if (c < (colIdx / 2)) {
                     div_left_sum += div_here;
                     left_cnt++;
@@ -247,10 +281,12 @@ ofd_result_t ofd_process_gray(const uint8_t* cur)
     out.divergence = div_avg;
     out.vx_mean = (flow_cnt > 0) ? (vx_sum / (float)flow_cnt) : 0.0f;
     out.vy_mean = (flow_cnt > 0) ? -(vy_sum / (float)flow_cnt) : 0.0f;  // flip Y for roll=-180° mount
+    out.mean_flow_mag     = (flow_cnt > 0) ? (flow_mag_sum / (float)flow_cnt) : 0.0f;
+    out.mean_flow_mag_raw = (flow_cnt > 0) ? (flow_mag_raw_sum / (float)flow_cnt) : 0.0f;
     out.flow_cnt = flow_cnt;
     out.div_cnt  = div_cnt;
 
-    // time-to-contact proxy: tau ≈ 1/div (only meaningful if div>0)
+    // time-to-contact proxy: tau ≈ 1/div (diagnostic only — not used for decisions)
     if (div_avg > EPS_DIV) out.tau = 1.0f / div_avg;
     else out.tau = 1e6f;
 

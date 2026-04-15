@@ -19,7 +19,8 @@
 #endif
 
 #define TAG "CAM_LCD"
-#define BUFFER_COUNT 3
+#define BUFFER_COUNT 6
+#define CAMERA_DEBUG_PROBE_RGB565 1
 
 typedef struct {
     void   *addr;
@@ -31,6 +32,7 @@ static int        s_type    = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 static int        s_stride  = 0;
 static int        s_src_w   = 0;
 static int        s_src_h   = 0;
+static uint32_t   s_pixfmt  = 0;
 
 static mmap_buf_t s_bufs[BUFFER_COUNT] = {0};
 static camera_sensor_t s_sensor = CAMERA_OV5647;
@@ -68,6 +70,21 @@ void camera_init(void)
     struct v4l2_format fmt = {0};
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
+    /* Enumerate supported frame sizes for the current probe format. */
+    {
+        struct v4l2_frmsizeenum fse = {0};
+        fse.pixel_format = CAMERA_DEBUG_PROBE_RGB565 ? v4l2_fourcc('R','G','B','P')
+                                                     : v4l2_fourcc('Y','U','1','2');
+        ESP_LOGI(TAG, "Supported %s output sizes:",
+                 CAMERA_DEBUG_PROBE_RGB565 ? "RGB565" : "YUV420 (I420)");
+        for (fse.index = 0; ioctl(s_fd, VIDIOC_ENUM_FRAMESIZES, &fse) == 0; fse.index++) {
+            if (fse.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+                ESP_LOGI(TAG, "  [%d] %dx%d", fse.index,
+                         fse.discrete.width, fse.discrete.height);
+            }
+        }
+    }
+
     if (s_req_w > 0 && s_req_h > 0) {
         fmt.fmt.pix.width  = s_req_w;
         fmt.fmt.pix.height = s_req_h;
@@ -79,22 +96,35 @@ void camera_init(void)
         fmt.fmt.pix.height = 720;
     }
 
-    // RGB565 mode
-    fmt.fmt.pix.pixelformat = v4l2_fourcc('R','G','B','P');
+    // YUV420 planar (I420): ISP demosaics RAW10 directly to YUV in hardware.
+    // I420 layout: Y plane (w×h) | U plane (w/2 × h/2) | V plane (w/2 × h/2)
+    fmt.fmt.pix.pixelformat = CAMERA_DEBUG_PROBE_RGB565 ? v4l2_fourcc('R','G','B','P')
+                                                        : v4l2_fourcc('Y','U','1','2');
 
     if (ioctl(s_fd, VIDIOC_S_FMT, &fmt) != 0) {
-        ESP_LOGE(TAG, "Failed to set camera format");
-        close(s_fd);
-        return;
+        ESP_LOGE(TAG, "Failed to set camera format (%dx%d) — falling back to 800x640",
+                 fmt.fmt.pix.width, fmt.fmt.pix.height);
+        fmt.fmt.pix.width  = 800;
+        fmt.fmt.pix.height = 640;
+        if (ioctl(s_fd, VIDIOC_S_FMT, &fmt) != 0) {
+            ESP_LOGE(TAG, "Fallback 800x640 also failed — camera unavailable");
+            close(s_fd);
+            return;
+        }
     }
 
     ioctl(s_fd, VIDIOC_G_FMT, &fmt);
 
     s_src_w  = fmt.fmt.pix.width;
     s_src_h  = fmt.fmt.pix.height;
-    s_stride = fmt.fmt.pix.bytesperline ? fmt.fmt.pix.bytesperline : s_src_w * 2;
+    s_stride = fmt.fmt.pix.bytesperline ? fmt.fmt.pix.bytesperline : s_src_w;
+    s_pixfmt = fmt.fmt.pix.pixelformat;
 
-    ESP_LOGI(TAG, "Camera active: %dx%d stride=%d", s_src_w, s_src_h, s_stride);
+    ESP_LOGI(TAG, "Camera active: %dx%d stride=%d pixfmt=%c%c%c%c (0x%08x)",
+             s_src_w, s_src_h, s_stride,
+             (char)(s_pixfmt & 0xFF), (char)((s_pixfmt >> 8) & 0xFF),
+             (char)((s_pixfmt >> 16) & 0xFF), (char)((s_pixfmt >> 24) & 0xFF),
+             (unsigned)s_pixfmt);
 
     struct v4l2_requestbuffers req = {
         .count  = BUFFER_COUNT,
@@ -155,14 +185,24 @@ void camera_return_frame(camera_frame_t *f)
     ioctl(s_fd, VIDIOC_QBUF, &buf);
 }
 
+int camera_get_stride(void)
+{
+    return s_stride;
+}
+
+uint32_t camera_get_pixelformat(void)
+{
+    return s_pixfmt;
+}
+
 
 /* --------------------------- RGB565 CROP TO LCD -------------------------- */
 void crop_to_lcd(const uint16_t *src, uint16_t *dst)
 {
     if (!src || !dst) return;
 
-    const int src_w = 800;
-    const int src_h = 640;
+    const int src_w = 1920;
+    const int src_h = 1080;
 
     const int dst_w = 720;
     const int dst_h = 1280;

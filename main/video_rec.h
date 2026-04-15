@@ -27,10 +27,10 @@ void video_rec_set_imu(imu_data_t d);
 /** Init SD card, PSRAM ring buffer, and OFD engine. Call once at startup. */
 void video_rec_init(void);
 
-/** Start recording to the next V{id}.VID + V{id}.CSV on the SD card. */
+/** Start recording to the next V{id}.MJP + V{id}.CSV on the SD card. */
 void start_recording(void);
 
-/** Stop recording, flush and close files, patch header. */
+/** Stop recording, flush and close files. */
 void stop_recording(void);
 
 /** Returns true while a recording session is active. */

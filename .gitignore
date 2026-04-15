@@ -17,7 +17,10 @@ managed_components/
 # produced by the video converter — these are data, not source files.
 V*.VID
 V*.vid
+V*.MJP
+V*.mjp
 V*.CSV
+V*.MP4
 V*.mp4
 
 # ── Python (video converter) ─────────────────────────────────────────────────

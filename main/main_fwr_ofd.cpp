@@ -15,6 +15,7 @@
 #include "camera.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
@@ -135,8 +136,8 @@ static void imu_init(void)
 }
 
 /* ---- Camera ---- */
-#define CAM_W  800
-#define CAM_H  640
+#define CAM_W  1280
+#define CAM_H  960
 
 /* ---- OFD avoidance output scaling (thresholds/detection in ofd_task via ofd_config.h) ---- */
 #define MAX_AVOID_US  600   // max servo command magnitude (µs)
@@ -204,16 +205,26 @@ extern "C" void app_main(void)
         }
 
         /* ---- Capture and forward to recorder ---- */
+        int64_t t_cam0 = esp_timer_get_time();
         camera_frame_t f = camera_get_frame();
-        video_rec_enqueue(&f);   // memcpy to PSRAM ring buffer + camera_return_frame inside
+        int64_t t_cam1 = esp_timer_get_time();
+        video_rec_enqueue(&f);   // queue RGB565 frame for JPEG stream recording + camera_return_frame
+        int64_t t_enq  = esp_timer_get_time();
 
-        /* ---- OFD avoidance — dual-gate result from ofd_task (logged only) ---- */
+        // Timing instrumentation: identify main-loop bottleneck
+        static int dbg_cnt = 0;
+        if (is_recording() && ++dbg_cnt % 30 == 0) {
+            ESP_LOGI(TAG, "Loop: cam_wait=%lldms  enqueue=%lldms  total=%lldms",
+                     (t_cam1 - t_cam0) / 1000,
+                     (t_enq  - t_cam1) / 1000,
+                     (t_enq  - t_cam0) / 1000);
+        }
+
+        /* ---- OFD avoidance — flow-magnitude-primary result from ofd_task (logged only) ---- */
         ofd_result_t r = video_rec_last_ofd();
         if (r.looming_detected) {
             int ail = USE_ROLL ? (int)(r.turn_cmd * MAX_AVOID_US) : 0;
-            ESP_LOGW(TAG, "[AVOID] lvl=%d tau=%.1fms ema_div=%.4f turn=%.3f az_q=%d cmd=%d (disabled)",
-                     r.evasion_level, (double)r.tau_ms,
-                     (double)r.ema_div, (double)r.turn_cmd, (int)r.az_quiet, ail);
+            (void)ail;
             // fwr_set_ofd_avoidance(ail, 0);   /* TODO: uncomment to enable avoidance */
         } else {
             // fwr_set_ofd_avoidance(0, 0);

@@ -29,6 +29,7 @@ idf_component_register(
         fatfs
         vfs
         sdmmc
+        esp_h264
     EMBED_FILES
         # "model/best_esp32p4_320.espdl"
         #  "model/basketball_640.espdl"
