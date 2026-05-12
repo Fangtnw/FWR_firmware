@@ -43,7 +43,9 @@
       "Read(//c/Espressif/**)",
       "Bash(cmd.exe /c \"where idf.py\")",
       "Read(//c/Users/thana/esp/v5.5.1/**)",
-      "Bash(grep -v \"^.*:.*//.*width\\\\|//.*height\")"
+      "Bash(grep -v \"^.*:.*//.*width\\\\|//.*height\")",
+      "Bash(ls -la \"C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\.claude\\\\\" 2>&1)",
+      "Bash(git -C \"C:\\\\Users\\\\thana\\\\01_Fang\\\\Research\\\\04_Firmware_ESP32P4\\\\FWR_vision\\\\.claude\\\\worktrees\\\\infallible-raman-1a0152\" status)"
     ]
   }
 }
